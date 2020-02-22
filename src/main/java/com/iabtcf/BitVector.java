@@ -1,5 +1,7 @@
 package com.iabtcf;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.BitSet;
 
@@ -13,6 +15,14 @@ public class BitVector {
 
     public static BitVector from(byte[] bytes) {
         return new BitVector(bytes);
+    }
+
+    private BitVector(InputStream inputStream) throws IOException {
+        this.bitSet = fromInputStream(inputStream);
+    }
+
+    public static BitVector from(InputStream inputStream) throws IOException {
+        return new BitVector(inputStream);
     }
 
     /**
@@ -29,6 +39,20 @@ public class BitVector {
                 bits.set(index - 1, (b & 1) > 0);
                 b >>= 1;
             }
+        }
+        return bits;
+    }
+
+    private BitSet fromInputStream(InputStream inputStream) throws IOException {
+        BitSet bits = new BitSet();
+        int read;
+        int i = 0;
+        while ((read = inputStream.read()) != -1){
+            for (int index = (i + 1) * 8; read != 0; index--) {
+                bits.set(index - 1, (read & 1) > 0);
+                read >>= 1;
+            }
+            i++;
         }
         return bits;
     }

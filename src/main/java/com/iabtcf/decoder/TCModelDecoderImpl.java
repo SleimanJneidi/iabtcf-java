@@ -1,6 +1,10 @@
 package com.iabtcf.decoder;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
 import com.iabtcf.BitVector;
 import com.iabtcf.model.TCModel;
@@ -13,40 +17,35 @@ public class TCModelDecoderImpl implements TCModelDecoder {
 
     @Override
     public TCModel decode(String consentString) {
-        String[] split = consentString.split("\\.");
-        String base64UrlEncodedString = split[0];
-        BitVector bitVector = vectorFromString(base64UrlEncodedString);
+        try (DotSeparatedInputStream is = new DotSeparatedInputStream(consentString);
+             InputStream decodedStream = DECODER.wrap(is)) {
+            BitVector core = BitVector.from(decodedStream);
+            int version =
+                    core.readUnsignedInt(
+                            FieldConstants.CoreStringConstants.VERSION_OFFSET,
+                            FieldConstants.Type.TINY_INT.length());
 
-        int version =
-                bitVector.readUnsignedInt(
-                        FieldConstants.CoreStringConstants.VERSION_OFFSET,
-                        FieldConstants.Type.TINY_INT.length());
-        switch (version) {
-            case 1:
-                // TODO : add version1
-                throw new UnsupportedOperationException("Version 1 is unsupported yet");
-            case 2:
-                if (split.length > 1) {
-                    String secondPartBase64 = split[1];
-                    BitVector secondPartBitVector = vectorFromString(secondPartBase64);
-                    if (split.length > 2) {
-                        String thirdPartBase64 = split[2];
-                        BitVector thirdPartBitVector = vectorFromString(thirdPartBase64);
-                        return BitVectorTCModelV2.fromBitVector(
-                                bitVector, secondPartBitVector, thirdPartBitVector);
-                    } else {
-                        return BitVectorTCModelV2.fromBitVector(bitVector, secondPartBitVector);
+            switch (version) {
+                case 1:
+                    // TODO : add version1
+                    throw new UnsupportedOperationException("Version 1 is unsupported yet");
+                case 2:
+                    List<BitVector> remainingVectors = new ArrayList<>();
+                    while (is.hasNext()) {
+                        try (InputStream nextInputStream = DECODER.wrap(is)) {
+                            BitVector nextBitVector = BitVector.from(nextInputStream);
+                            remainingVectors.add(nextBitVector);
+                        }
                     }
-                } else {
-                    return BitVectorTCModelV2.fromBitVector(bitVector);
-                }
-            default:
-                throw new UnsupportedOperationException("Version " + version + "is unsupported yet");
+                    return BitVectorTCModelV2.fromBitVector(core, remainingVectors.toArray(new BitVector[0]));
+                default:
+                    throw new UnsupportedOperationException("Version " + version + "is unsupported yet");
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+
     }
 
-    private BitVector vectorFromString(String base64UrlEncodedString) {
-        byte[] bytes = DECODER.decode(base64UrlEncodedString);
-        return BitVector.from(bytes);
-    }
 }
